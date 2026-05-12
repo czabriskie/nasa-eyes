@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NASA Eyes — Earth from L1</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="starfield" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a href="#/" class="brand">
+      <span class="brand-dot"></span>
+      NASA EYES
+    </a>
+    <nav class="topnav" id="topnav">
+      <a href="#/" data-mode="cal">Calendar</a>
+      <a href="#/range/natural" data-mode="range">Range</a>
+      <a href="#/compare/natural" data-mode="compare">Compare</a>
+    </nav>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <footer class="footer">
+    <span>Imagery: NASA EPIC (DSCOVR · L1 Lagrange Point)</span>
+    <span class="sep">·</span>
+    <a href="https://epic.gsfc.nasa.gov/" target="_blank" rel="noopener">epic.gsfc.nasa.gov</a>
+    <span class="sep">·</span>
+    <a id="source-link" href="#" target="_blank" rel="noopener">Source</a>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
