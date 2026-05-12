@@ -1,21 +1,24 @@
 // Month-grid calendar with gap-aware day cells.
 
 import { COLLECTIONS } from "./api.js";
-import { ensureAvailability } from "./state.js";
+import {
+  ensureAvailability, getLastCollection, latestAvailable, setLastCollection,
+} from "./state.js";
 import {
   spinner, errorBanner, el, isoToday, parseIso, toIso,
-  pad2, monthName, dowShort,
+  pad2, monthName, dowShort, toast,
 } from "./ui.js";
 
 function defaultMonth() {
   const d = new Date();
-  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, collection: "natural" };
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, collection: getLastCollection() };
 }
 
 function parseRouteParams(params) {
   // params: [collection?, "YYYY-MM"?]
   const out = defaultMonth();
-  if (params.length === 0) return out;
+  let explicitMonth = false;
+  if (params.length === 0) return { ...out, explicitMonth };
   if (COLLECTIONS.includes(params[0])) {
     out.collection = params[0];
     params = params.slice(1);
@@ -24,8 +27,9 @@ function parseRouteParams(params) {
     const [y, m] = params[0].split("-").map(Number);
     out.y = y;
     out.m = m;
+    explicitMonth = true;
   }
-  return out;
+  return { ...out, explicitMonth };
 }
 
 function navUrl(collection, y, m) {
@@ -40,8 +44,17 @@ function shiftMonth(y, m, delta) {
   return [ny, nm];
 }
 
+function anyDayInMonth(dateSet, y, m) {
+  const prefix = `${y}-${pad2(m)}-`;
+  for (const d of dateSet) {
+    if (d.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
 export async function render(container, params) {
-  const { collection, y, m } = parseRouteParams(params);
+  const { collection, y, m, explicitMonth } = parseRouteParams(params);
+  setLastCollection(collection);
 
   container.appendChild(spinner(`Loading ${collection} availability…`));
   let available;
@@ -52,6 +65,21 @@ export async function render(container, params) {
     return;
   }
   container.replaceChildren();
+
+  // If the URL didn't pin a month AND this month has no data, jump to the
+  // most recent month that does. (Avoids "all gray" surprises when the user
+  // switches collection on a current month that the collection doesn't cover.)
+  if (!explicitMonth) {
+    const monthHasData = anyDayInMonth(available, y, m);
+    if (!monthHasData) {
+      const latest = latestAvailable(available);
+      if (latest) {
+        const [ny, nm] = latest.split("-").map(Number);
+        location.hash = navUrl(collection, ny, nm);
+        return;
+      }
+    }
+  }
 
   // Header
   const today = isoToday();
@@ -73,7 +101,26 @@ export async function render(container, params) {
       ),
     ),
     el("div", { class: "controls" },
-      collectionSelect(collection, (next) => location.hash = navUrl(next, y, m)),
+      collectionSelect(collection, async (next) => {
+        setLastCollection(next);
+        // When the user changes collection, prefer landing on a month that
+        // actually has data for it (e.g. cloud's most recent is months old).
+        try {
+          const nextAvail = await ensureAvailability(next);
+          if (anyDayInMonth(nextAvail, y, m)) {
+            location.hash = navUrl(next, y, m);
+            return;
+          }
+          const latest = latestAvailable(nextAvail);
+          if (latest) {
+            const [ny, nm] = latest.split("-").map(Number);
+            toast(`Latest ${next} imagery: ${latest}`);
+            location.hash = navUrl(next, ny, nm);
+            return;
+          }
+        } catch {}
+        location.hash = navUrl(next, y, m);
+      }),
       el("button", {
         class: "btn",
         onclick: () => {
@@ -141,6 +188,23 @@ export async function render(container, params) {
   }
 
   container.appendChild(grid);
+
+  // Empty-state banner: month has no imagery for this collection.
+  if (presentCount === 0) {
+    const latest = latestAvailable(available);
+    const banner = el("p", { class: "cal-meta", style: { marginTop: "1.2rem", color: "var(--warn)" } });
+    if (latest) {
+      const [ly, lm] = latest.split("-").map(Number);
+      banner.appendChild(document.createTextNode(
+        `No ${collection} imagery in ${monthName(m - 1)} ${y}. Latest available: ${latest}. `,
+      ));
+      const a = el("a", { href: navUrl(collection, ly, lm) }, "Jump to that month →");
+      banner.appendChild(a);
+    } else {
+      banner.textContent = `No ${collection} imagery available.`;
+    }
+    container.appendChild(banner);
+  }
 
   // Footer hint
   container.appendChild(el("p", { class: "cal-meta", style: { marginTop: "1.2rem" } },

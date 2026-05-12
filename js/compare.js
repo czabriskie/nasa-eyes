@@ -1,11 +1,14 @@
 // Side-by-side comparison of two dates with a shared scrubber.
 
 import { buildImageUrl, COLLECTIONS, getImagesForDate, imageTimeOfDay } from "./api.js";
-import { ensureAvailability, findNearestAvailable } from "./state.js";
+import {
+  ensureAvailability, findNearestAvailable, getLastCollection,
+  latestAvailable, setLastCollection,
+} from "./state.js";
 import { el, spinner, errorBanner, isoToday, addDays, parseIso, toIso, formatHM, toast } from "./ui.js";
 
 function parseRoute(params) {
-  let collection = "natural";
+  let collection = getLastCollection();
   if (COLLECTIONS.includes(params[0])) {
     collection = params[0];
     params = params.slice(1);
@@ -22,6 +25,7 @@ function navUrl(collection, a, b) {
 export async function render(container, params) {
   const route = parseRoute(params);
   let { collection, dateA, dateB } = route;
+  setLastCollection(collection);
 
   container.appendChild(buildHeader(collection, dateA, dateB));
 
@@ -34,16 +38,14 @@ export async function render(container, params) {
     return;
   }
 
-  // Pick sensible defaults: most recent available date, and the one 7 days prior.
+  // Pick sensible defaults: most recent available date for this collection,
+  // and the one 7 days prior (snapped to nearest available).
   if (!dateA || !dateB) {
-    const today = isoToday();
-    const nearestToday = findNearestAvailable(available, today);
-    const aWeekAgo = nearestToday
-      ? toIso(addDays(parseIso(nearestToday), -7))
-      : today;
+    const anchor = latestAvailable(available) || isoToday();
+    const aWeekAgo = toIso(addDays(parseIso(anchor), -7));
     const nearestWeekAgo = findNearestAvailable(available, aWeekAgo);
-    if (!dateA) dateA = nearestWeekAgo || nearestToday;
-    if (!dateB) dateB = nearestToday;
+    if (!dateA) dateA = nearestWeekAgo || anchor;
+    if (!dateB) dateB = anchor;
   }
 
   // Snap to available if needed.
@@ -77,7 +79,23 @@ export async function render(container, params) {
   container.appendChild(controls);
 
   const topRow = el("div", { class: "film-controls" },
-    collectionSelect(collection, (next) => location.hash = navUrl(next, dateA, dateB)),
+    collectionSelect(collection, async (next) => {
+      setLastCollection(next);
+      // Re-anchor to that collection's latest data; otherwise switching cloud
+      // (last data 2025-07-15) lands you on dates with no imagery.
+      try {
+        const nextAvail = await ensureAvailability(next);
+        const anchor = latestAvailable(nextAvail);
+        if (anchor) {
+          const weekAgo = toIso(addDays(parseIso(anchor), -7));
+          const left = findNearestAvailable(nextAvail, weekAgo) || anchor;
+          toast(`Latest ${next}: ${anchor}`);
+          location.hash = navUrl(next, left, anchor);
+          return;
+        }
+      } catch {}
+      location.hash = navUrl(next, dateA, dateB);
+    }),
     el("button", {
       class: "btn btn-primary",
       onclick: () => {

@@ -4,16 +4,32 @@ import * as Calendar from "./calendar.js";
 import * as Day from "./day.js";
 import * as Range from "./range.js";
 import * as Compare from "./compare.js";
+import { COLLECTIONS } from "./api.js";
+import { getLastCollection } from "./state.js";
 import { toast } from "./ui.js";
 
 const VIEW = () => document.getElementById("view");
 
+function currentCollectionFromHash() {
+  const parts = location.hash.replace(/^#/, "").split("/").filter(Boolean);
+  // [view, collection?, ...]
+  if (parts.length >= 2 && COLLECTIONS.includes(parts[1])) return parts[1];
+  return getLastCollection();
+}
+
 function setActiveNav(mode) {
   const nav = document.getElementById("topnav");
   if (!nav) return;
+  const coll = currentCollectionFromHash();
   for (const a of nav.querySelectorAll("a")) {
     if (a.dataset.mode === mode) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
+    // Preserve the current collection across the top nav so switching views
+    // doesn't reset to natural.
+    const m = a.dataset.mode;
+    if (m === "cal") a.href = `#/cal/${coll}`;
+    else if (m === "range") a.href = `#/range/${coll}`;
+    else if (m === "compare") a.href = `#/compare/${coll}`;
   }
 }
 

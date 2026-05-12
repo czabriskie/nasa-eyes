@@ -3,6 +3,22 @@
 
 import { getAvailableDates } from "./api.js";
 
+const COLL_KEY = "nasa-eyes:lastCollection";
+
+export function getLastCollection() {
+  try {
+    return localStorage.getItem(COLL_KEY) || "natural";
+  } catch {
+    return "natural";
+  }
+}
+
+export function setLastCollection(name) {
+  try {
+    localStorage.setItem(COLL_KEY, name);
+  } catch {}
+}
+
 const TTL_MS = 6 * 60 * 60 * 1000;
 const KEY_PREFIX = "nasa-eyes:avail:";
 const memoryCache = new Map(); // collection → Set<"YYYY-MM-DD">
@@ -64,6 +80,16 @@ export function clearAvailabilityCache(collection) {
       }
     } catch {}
   }
+}
+
+// Most-recent available date in the set, or null.
+export function latestAvailable(dateSet) {
+  if (!dateSet || dateSet.size === 0) return null;
+  let best = null;
+  for (const d of dateSet) {
+    if (best === null || d > best) best = d;
+  }
+  return best;
 }
 
 // Convenience: nearest available date to a target, or null if set is empty.

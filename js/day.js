@@ -1,20 +1,21 @@
 // Single-day Earth-rotation animation player.
 
 import { buildImageUrl, COLLECTIONS, getImagesForDate } from "./api.js";
-import { ensureAvailability } from "./state.js";
+import { ensureAvailability, getLastCollection, setLastCollection } from "./state.js";
 import { el, spinner, errorBanner, formatHM, preloadImage, withConcurrency } from "./ui.js";
 
 const DEFAULT_FPS = 6;
 
 function parseRoute(params) {
   // [collection, "YYYY-MM-DD"]
-  const collection = COLLECTIONS.includes(params[0]) ? params[0] : "natural";
+  const collection = COLLECTIONS.includes(params[0]) ? params[0] : getLastCollection();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(params[1] || "") ? params[1] : null;
   return { collection, date };
 }
 
 export async function render(container, params) {
   const { collection, date } = parseRoute(params);
+  setLastCollection(collection);
   if (!date) {
     container.appendChild(errorBanner("Missing date in URL. Try #/day/natural/2025-07-10"));
     return;

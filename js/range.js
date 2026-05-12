@@ -1,10 +1,12 @@
 // Range view: a filmstrip of thumbnails across multiple days, with a scrubber.
 
 import { buildImageUrl, COLLECTIONS, getImagesForDate } from "./api.js";
-import { ensureAvailability } from "./state.js";
+import {
+  ensureAvailability, getLastCollection, latestAvailable, setLastCollection,
+} from "./state.js";
 import {
   el, spinner, errorBanner, isoToday, parseIso, toIso, addDays,
-  withConcurrency, formatHM,
+  withConcurrency, formatHM, toast,
 } from "./ui.js";
 
 const DEFAULT_DAYS = 14;
@@ -12,17 +14,14 @@ const MAX_DAYS = 30;
 
 function parseRoute(params) {
   // [collection?, "YYYY-MM-DD"?, "YYYY-MM-DD"?]
-  const today = isoToday();
-  let collection = "natural";
+  let collection = getLastCollection();
   if (COLLECTIONS.includes(params[0])) {
     collection = params[0];
     params = params.slice(1);
   }
-  let end = today;
-  let start = toIso(addDays(parseIso(today), -(DEFAULT_DAYS - 1)));
-  if (/^\d{4}-\d{2}-\d{2}$/.test(params[0] || "")) start = params[0];
-  if (/^\d{4}-\d{2}-\d{2}$/.test(params[1] || "")) end = params[1];
-  return { collection, start, end };
+  const explicitStart = /^\d{4}-\d{2}-\d{2}$/.test(params[0] || "") ? params[0] : null;
+  const explicitEnd = /^\d{4}-\d{2}-\d{2}$/.test(params[1] || "") ? params[1] : null;
+  return { collection, explicitStart, explicitEnd };
 }
 
 function clampRange(start, end) {
@@ -41,15 +40,48 @@ function navUrl(collection, start, end) {
 }
 
 export async function render(container, params) {
-  const route = parseRoute(params);
-  const { start, end } = clampRange(route.start, route.end);
-  const { collection } = route;
+  const { collection, explicitStart, explicitEnd } = parseRoute(params);
+  setLastCollection(collection);
+
+  container.appendChild(spinner(`Loading ${collection} availability…`));
+  let available;
+  try {
+    available = await ensureAvailability(collection);
+  } catch (err) {
+    container.replaceChildren(errorBanner(`Failed to load availability: ${err.message}`));
+    return;
+  }
+  container.replaceChildren();
+
+  // Default range anchors to the latest available date for this collection,
+  // not "today" — keeps cloud/aerosol from looking empty out of the box.
+  let endDefault = isoToday();
+  if (!explicitStart && !explicitEnd) {
+    const latest = latestAvailable(available);
+    if (latest) endDefault = latest;
+  }
+  const startDefault = toIso(addDays(parseIso(endDefault), -(DEFAULT_DAYS - 1)));
+  const { start, end } = clampRange(explicitStart || startDefault, explicitEnd || endDefault);
 
   container.appendChild(buildHeader(collection, start, end));
 
   // Inline controls (collection + start/end pickers).
   const controls = el("div", { class: "film-controls" });
-  controls.appendChild(collectionSelect(collection, (next) => {
+  controls.appendChild(collectionSelect(collection, async (next) => {
+    setLastCollection(next);
+    // Anchor the new range to the latest available date for the new collection
+    // so switching collections doesn't drop you into an empty range.
+    try {
+      const nextAvail = await ensureAvailability(next);
+      const latest = latestAvailable(nextAvail);
+      if (latest) {
+        const newEnd = latest;
+        const newStart = toIso(addDays(parseIso(newEnd), -(DEFAULT_DAYS - 1)));
+        toast(`Latest ${next}: ${latest}`);
+        location.hash = navUrl(next, newStart, newEnd);
+        return;
+      }
+    } catch {}
     location.hash = navUrl(next, start, end);
   }));
   const startInput = el("input", { type: "date", class: "date-input", value: start });
@@ -79,15 +111,7 @@ export async function render(container, params) {
   scrubWrap.append(scrub, info);
   container.appendChild(scrubWrap);
 
-  // Resolve which dates in [start, end] are available.
-  let available;
-  try {
-    available = await ensureAvailability(collection);
-  } catch (err) {
-    strip.replaceWith(errorBanner(`Failed to fetch availability: ${err.message}`));
-    return;
-  }
-
+  // `available` was fetched at the top.
   const days = [];
   for (let d = parseIso(start); d <= parseIso(end); d = addDays(d, 1)) {
     const iso = toIso(d);
@@ -96,7 +120,20 @@ export async function render(container, params) {
   const presentDays = days.filter((d) => d.available);
 
   if (presentDays.length === 0) {
-    strip.replaceWith(errorBanner(`No ${collection} imagery in ${start} → ${end}. Try a wider range.`));
+    const latest = latestAvailable(available);
+    const msg = el("div", { class: "status", style: { color: "var(--warn)" } });
+    msg.appendChild(document.createTextNode(
+      `No ${collection} imagery in ${start} → ${end}. `,
+    ));
+    if (latest) {
+      const newEnd = latest;
+      const newStart = toIso(addDays(parseIso(newEnd), -(DEFAULT_DAYS - 1)));
+      msg.appendChild(el("a", { href: navUrl(collection, newStart, newEnd) },
+        `Jump to ${newStart} → ${newEnd}`));
+    } else {
+      msg.appendChild(document.createTextNode("Try a wider range or another collection."));
+    }
+    strip.replaceWith(msg);
     info.textContent = "No frames.";
     return;
   }
