@@ -57,8 +57,18 @@ js/
   compare.js       · two-date side-by-side
 ```
 
-NASA EPIC's public API has `Access-Control-Allow-Origin: *`, so the browser
-talks to it directly. No backend, no proxy.
+JSON metadata is fetched from `api.nasa.gov/EPIC/api/*` (mirrored EPIC data
+with CORS on every collection). Images themselves still load from
+`epic.gsfc.nasa.gov/archive/...` via `<img>` tags. No backend, no proxy.
+
+The free `DEMO_KEY` allows 30 requests/hour per IP — fine for casual use
+since the availability list is cached in localStorage for 6 hours per
+collection. If you hit a rate limit, grab a personal key from
+[api.nasa.gov](https://api.nasa.gov) and set it:
+
+```js
+localStorage.setItem("nasa-eyes:apiKey", "YOUR_KEY_HERE");
+```
 
 ## Deploying
 

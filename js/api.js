@@ -1,19 +1,57 @@
-// NASA EPIC API wrapper. Browser-direct (CORS verified).
+// NASA EPIC API wrapper.
+//
+// We hit `api.nasa.gov/EPIC/api/*` instead of `epic.gsfc.nasa.gov/api/*`
+// because the gsfc origin only sets `Access-Control-Allow-Origin` on the
+// `natural` endpoints — enhanced/aerosol/cloud have no CORS header and
+// browsers refuse to expose the JSON. The api.nasa.gov mirror returns the
+// same payloads with `Access-Control-Allow-Origin: *` on every collection,
+// but requires an `api_key` query param (DEMO_KEY is fine for casual use,
+// 30 req/hr per IP).
+//
+// Image PNG/JPG URLs still come from epic.gsfc.nasa.gov/archive — those
+// load via <img> tags and aren't subject to CORS for display.
 
-export const API_BASE = "https://epic.gsfc.nasa.gov/api";
+export const API_BASE = "https://api.nasa.gov/EPIC/api";
 export const ARCHIVE_BASE = "https://epic.gsfc.nasa.gov/archive";
 
 export const COLLECTIONS = ["natural", "enhanced", "aerosol", "cloud"];
+
+const API_KEY_STORAGE = "nasa-eyes:apiKey";
 
 export function isCollection(name) {
   return COLLECTIONS.includes(name);
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url, { mode: "cors" });
-  if (!res.ok) {
-    throw new Error(`NASA API ${res.status}: ${url}`);
+export function getApiKey() {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE) || "DEMO_KEY";
+  } catch {
+    return "DEMO_KEY";
   }
+}
+
+export function setApiKey(key) {
+  try {
+    if (key) localStorage.setItem(API_KEY_STORAGE, key);
+    else localStorage.removeItem(API_KEY_STORAGE);
+  } catch {}
+}
+
+function withKey(url) {
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}api_key=${encodeURIComponent(getApiKey())}`;
+}
+
+async function fetchJson(url) {
+  const res = await fetch(withKey(url), { mode: "cors" });
+  if (res.status === 429) {
+    throw new Error(
+      "Rate limited by api.nasa.gov (DEMO_KEY allows 30 requests/hour). " +
+      "Get a free key at https://api.nasa.gov and set it via " +
+      "localStorage.setItem('nasa-eyes:apiKey', 'YOUR_KEY').",
+    );
+  }
+  if (!res.ok) throw new Error(`NASA API ${res.status}: ${url}`);
   return res.json();
 }
 
