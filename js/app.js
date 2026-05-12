@@ -19,7 +19,7 @@ function setActiveNav(mode) {
 
 function setSourceLink() {
   const a = document.getElementById("source-link");
-  if (a) a.href = "https://github.com/" + (window.NASA_EYES_REPO || "cameronzabriskie/nasa-eyes");
+  if (a) a.href = "https://github.com/" + (window.NASA_EYES_REPO || "czabriskie/nasa-eyes");
 }
 
 async function dispatch() {
