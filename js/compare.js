@@ -5,7 +5,10 @@ import {
   ensureAvailability, findNearestAvailable, getLastCollection,
   latestAvailable, setLastCollection,
 } from "./state.js";
-import { el, spinner, errorBanner, isoToday, addDays, parseIso, toIso, formatHM, toast } from "./ui.js";
+import {
+  el, spinner, errorBanner, isoToday, addDays, parseIso, toIso, formatHM, toast,
+  withConcurrency, preloadImage,
+} from "./ui.js";
 
 // Compare is for noticing differences, so it starts crawling — 0.5 fps = one
 // frame every 2 seconds. The slider goes up to the day-view default.
@@ -164,32 +167,62 @@ export async function render(container, params) {
   sideA.bind(imagesA);
   sideB.bind(imagesB);
 
-  // Scrubber drives both sides. Max is the SHORTER of the two when matching
-  // by index, and the longer when matching by time (we'll map indices).
-  function refresh() {
-    const mode = matchSelect.value;
-    if (mode === "index") {
+  // Preload every frame for both sides in the background. Subsequent
+  // refreshes hit the browser cache so the per-frame decode-and-commit
+  // pair is essentially instant.
+  const allUrls = [...sideA.urls(), ...sideB.urls()];
+  withConcurrency(allUrls, 4, preloadImage);
+
+  // Compute the frame indices to show on each side for the given scrub value.
+  function pickIndices() {
+    if (matchSelect.value === "index") {
       const max = Math.min(imagesA.length, imagesB.length) - 1;
       scrub.max = String(Math.max(0, max));
       const i = Math.min(Number(scrub.value), max);
-      sideA.showFrame(i);
-      sideB.showFrame(i);
-    } else {
-      // Drive by left side; find nearest time on right side per left frame.
-      scrub.max = String(imagesA.length - 1);
-      const i = Math.min(Number(scrub.value), imagesA.length - 1);
-      sideA.showFrame(i);
-      const targetTOD = imageTimeOfDay(imagesA[i]);
-      let bestJ = 0;
-      let bestDiff = Infinity;
-      for (let j = 0; j < imagesB.length; j++) {
-        const tod = imageTimeOfDay(imagesB[j]);
-        if (!tod || !targetTOD) continue;
-        const diff = Math.abs(Number(tod) - Number(targetTOD));
-        if (diff < bestDiff) { bestDiff = diff; bestJ = j; }
-      }
-      sideB.showFrame(bestJ);
+      return [i, i];
     }
+    scrub.max = String(imagesA.length - 1);
+    const i = Math.min(Number(scrub.value), imagesA.length - 1);
+    const targetTOD = imageTimeOfDay(imagesA[i]);
+    let bestJ = 0, bestDiff = Infinity;
+    for (let j = 0; j < imagesB.length; j++) {
+      const tod = imageTimeOfDay(imagesB[j]);
+      if (!tod || !targetTOD) continue;
+      const diff = Math.abs(Number(tod) - Number(targetTOD));
+      if (diff < bestDiff) { bestDiff = diff; bestJ = j; }
+    }
+    return [i, bestJ];
+  }
+
+  // Decode a URL off-screen and resolve when it's painted-ready. Uses
+  // Image.decode() when available, falls back to onload otherwise.
+  function decodeOffscreen(url) {
+    return new Promise((resolve) => {
+      const im = new Image();
+      const done = () => resolve();
+      im.onload = () => {
+        if (typeof im.decode === "function") im.decode().then(done, done);
+        else done();
+      };
+      im.onerror = done;
+      im.src = url;
+    });
+  }
+
+  // Async + token-guarded so rapid scrub events don't overlap. The latest
+  // call wins; older calls bail out before they commit a stale frame.
+  let refreshToken = 0;
+  async function refresh() {
+    const myToken = ++refreshToken;
+    const [iA, iB] = pickIndices();
+    const urlA = sideA.urlAt(iA);
+    const urlB = sideB.urlAt(iB);
+    if (!urlA || !urlB) return;
+
+    await Promise.all([decodeOffscreen(urlA), decodeOffscreen(urlB)]);
+    if (myToken !== refreshToken) return; // a newer refresh superseded us
+    sideA.commit(iA, urlA);
+    sideB.commit(iB, urlB);
   }
 
   // Manual scrub pauses the animation — user is clearly steering by hand.
@@ -270,10 +303,18 @@ function makeSide(date, collection) {
   return {
     root,
     bind(imgs) { images = imgs; },
-    showFrame(i) {
+    urls() {
+      return images.map((im) => buildImageUrl(collection, im.date, im.image, "png"));
+    },
+    urlAt(i) {
       const target = images[i];
-      if (!target) return;
-      const url = buildImageUrl(collection, target.date, target.image, "png");
+      return target ? buildImageUrl(collection, target.date, target.image, "png") : null;
+    },
+    // Commit a URL we've already preloaded/decoded. Synchronous so both
+    // sides' assignments land in the same JS turn and paint together.
+    commit(i, url) {
+      const target = images[i];
+      if (!target || !url) return;
       if (img.src !== url) img.src = url;
       caption.textContent = `${date} · frame ${i} · ${formatHM(target.date)}`;
     },
