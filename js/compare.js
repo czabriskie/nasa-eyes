@@ -7,6 +7,13 @@ import {
 } from "./state.js";
 import { el, spinner, errorBanner, isoToday, addDays, parseIso, toIso, formatHM, toast } from "./ui.js";
 
+// Compare is for noticing differences, so it starts crawling — 0.5 fps = one
+// frame every 2 seconds. The slider goes up to the day-view default.
+const DEFAULT_FPS = 0.5;
+const MIN_FPS = 0.25;
+const MAX_FPS = 6;
+const FPS_STEP = 0.25;
+
 function parseRoute(params) {
   let collection = getLastCollection();
   if (COLLECTIONS.includes(params[0])) {
@@ -114,14 +121,27 @@ export async function render(container, params) {
   grid.appendChild(sideB.root);
   container.appendChild(grid);
 
-  // Shared scrubber + match-mode toggle
+  // Shared playback bar: play/pause, scrubber, fps, match-mode.
   const shared = el("div", { class: "compare-shared" });
+  const playBtn = el("button", { class: "btn btn-primary", type: "button" }, "❚❚ Pause");
   const scrub = el("input", { type: "range", class: "scrub", min: "0", max: "0", value: "0", style: { flex: "1" } });
+  const fps = el("input", {
+    type: "range", class: "scrub",
+    min: String(MIN_FPS), max: String(MAX_FPS), step: String(FPS_STEP),
+    value: String(DEFAULT_FPS), style: { width: "100px" },
+    title: "Animation speed",
+  });
   const matchSelect = el("select", { class: "select" },
     el("option", { value: "index" }, "Match by index"),
     el("option", { value: "time" }, "Match by closest time of day"),
   );
-  shared.append(scrub, matchSelect);
+  shared.append(
+    playBtn,
+    scrub,
+    el("span", { class: "cal-meta", style: { fontSize: "0.7rem" } }, "FPS"),
+    fps,
+    matchSelect,
+  );
   container.appendChild(shared);
 
   // Load both sides in parallel.
@@ -172,22 +192,70 @@ export async function render(container, params) {
     }
   }
 
-  scrub.addEventListener("input", refresh);
+  // Manual scrub pauses the animation — user is clearly steering by hand.
+  scrub.addEventListener("input", () => { pause(); refresh(); });
   matchSelect.addEventListener("change", refresh);
   refresh();
 
-  // Keyboard: ← → step scrub
+  // Animation loop: advance the scrubber on a timer driven by FPS.
+  let playing = false;
+  let rafToken = null;
+  let lastTick = 0;
+  function tick(ts) {
+    if (!playing) return;
+    const fpsVal = Number(fps.value) || DEFAULT_FPS;
+    const interval = 1000 / fpsVal;
+    if (ts - lastTick >= interval) {
+      lastTick = ts;
+      const max = Number(scrub.max);
+      const next = (Number(scrub.value) + 1) > max ? 0 : Number(scrub.value) + 1;
+      scrub.value = String(next);
+      refresh();
+    }
+    rafToken = requestAnimationFrame(tick);
+  }
+  function play() {
+    if (playing) return;
+    playing = true;
+    playBtn.textContent = "❚❚ Pause";
+    lastTick = performance.now();
+    rafToken = requestAnimationFrame(tick);
+  }
+  function pause() {
+    if (!playing) return;
+    playing = false;
+    playBtn.textContent = "▶ Play";
+    if (rafToken) cancelAnimationFrame(rafToken);
+    rafToken = null;
+  }
+  playBtn.addEventListener("click", () => (playing ? pause() : play()));
+
+  // Keyboard: space → play/pause, ← → → step manually (pauses animation).
   const keyHandler = (e) => {
     if (e.target.matches("input, textarea, select")) return;
-    if (e.code === "ArrowLeft") { scrub.value = String(Math.max(0, Number(scrub.value) - 1)); refresh(); }
-    if (e.code === "ArrowRight") { scrub.value = String(Math.min(Number(scrub.max), Number(scrub.value) + 1)); refresh(); }
+    if (e.code === "Space") { e.preventDefault(); playing ? pause() : play(); }
+    if (e.code === "ArrowLeft") {
+      pause();
+      scrub.value = String(Math.max(0, Number(scrub.value) - 1));
+      refresh();
+    }
+    if (e.code === "ArrowRight") {
+      pause();
+      scrub.value = String(Math.min(Number(scrub.max), Number(scrub.value) + 1));
+      refresh();
+    }
   };
   window.addEventListener("keydown", keyHandler);
+
   const cleanup = () => {
+    pause();
     window.removeEventListener("keydown", keyHandler);
     window.removeEventListener("hashchange", cleanup);
   };
   window.addEventListener("hashchange", cleanup);
+
+  // Auto-play after a beat so the first frames have a chance to load.
+  setTimeout(() => { if (document.body.contains(playBtn)) play(); }, 400);
 }
 
 function makeSide(date, collection) {
