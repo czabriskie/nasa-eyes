@@ -4,8 +4,10 @@ import { buildImageUrl, COLLECTIONS, getImagesForDate } from "./api.js";
 import { ensureAvailability, getLastCollection, setLastCollection } from "./state.js";
 import { el, spinner, errorBanner, formatHM, preloadImage, withConcurrency } from "./ui.js";
 
-const DEFAULT_FPS = 3;
+const DEFAULT_FPS = 1.5;
+const MIN_FPS = 0.5;
 const MAX_FPS = 6;
+const FPS_STEP = 0.5;
 
 function parseRoute(params) {
   // [collection, "YYYY-MM-DD"]
@@ -70,7 +72,11 @@ export async function render(container, params) {
   const fpsWrap = el("label", { class: "controls", style: { gap: "0.4rem" } },
     el("span", { class: "hud-row", style: { fontSize: "0.75rem", color: "var(--fg-2)" } }, "FPS"),
   );
-  const fps = el("input", { type: "range", class: "scrub", min: "1", max: String(MAX_FPS), value: String(DEFAULT_FPS), style: { width: "120px" } });
+  const fps = el("input", {
+    type: "range", class: "scrub",
+    min: String(MIN_FPS), max: String(MAX_FPS), step: String(FPS_STEP),
+    value: String(DEFAULT_FPS), style: { width: "120px" },
+  });
   fpsWrap.appendChild(fps);
   controls.append(playBtn, prevBtn, scrub, nextBtn, fpsWrap);
   container.appendChild(controls);
