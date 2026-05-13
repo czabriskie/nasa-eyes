@@ -22,9 +22,16 @@ export function isCollection(name) {
   return COLLECTIONS.includes(name);
 }
 
+// Keys are base64-encoded in storage so they aren't plain-readable in
+// DevTools at a glance. This is obfuscation, not encryption — a determined
+// user can decode it. For true protection you'd need a passphrase or a
+// server-side proxy.
 export function getApiKey() {
   try {
-    return localStorage.getItem(API_KEY_STORAGE) || "DEMO_KEY";
+    const raw = localStorage.getItem(API_KEY_STORAGE);
+    if (!raw) return "DEMO_KEY";
+    const decoded = atob(raw);
+    return decoded || "DEMO_KEY";
   } catch {
     return "DEMO_KEY";
   }
@@ -32,9 +39,17 @@ export function getApiKey() {
 
 export function setApiKey(key) {
   try {
-    if (key) localStorage.setItem(API_KEY_STORAGE, key);
+    if (key && key.trim()) localStorage.setItem(API_KEY_STORAGE, btoa(key.trim()));
     else localStorage.removeItem(API_KEY_STORAGE);
   } catch {}
+}
+
+export function hasCustomApiKey() {
+  try {
+    return Boolean(localStorage.getItem(API_KEY_STORAGE));
+  } catch {
+    return false;
+  }
 }
 
 function withKey(url) {

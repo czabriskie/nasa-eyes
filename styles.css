@@ -108,6 +108,106 @@ button { font-family: inherit; }
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+.topnav-btn {
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  color: var(--fg-1);
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, color 0.15s;
+}
+.topnav-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- Settings dialog ---------- */
+.settings-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(520px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(8, 12, 26, 0.98);
+  color: var(--fg-0);
+  box-shadow: var(--shadow);
+}
+.settings-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+.settings-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.4rem;
+  margin: 0;
+}
+.settings-dialog h3 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.settings-blurb {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--fg-1);
+}
+.settings-blurb code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: rgba(127, 223, 255, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.settings-row label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+.settings-row input {
+  border: 1px solid var(--border);
+  background: rgba(3, 6, 15, 0.6);
+  color: var(--fg-0);
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+.settings-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.settings-status {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--fg-2);
+}
+.settings-status strong { color: var(--fg-0); }
+.settings-status.custom strong { color: var(--accent); }
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
 
 #view {
   position: relative;

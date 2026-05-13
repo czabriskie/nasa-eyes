@@ -19,8 +19,41 @@
       <a href="#/" data-mode="cal">Calendar</a>
       <a href="#/range/natural" data-mode="range">Range</a>
       <a href="#/compare/natural" data-mode="compare">Compare</a>
+      <button id="settings-btn" class="topnav-btn" title="API key settings" aria-label="API key settings">
+        <span aria-hidden="true">⚙</span>
+      </button>
     </nav>
   </header>
+
+  <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+    <form method="dialog" id="settings-form">
+      <h3 id="settings-title">NASA API key</h3>
+      <p class="settings-blurb">
+        The site fetches metadata from <code>api.nasa.gov</code>. The shared
+        <code>DEMO_KEY</code> is rate-limited to 30 requests/hour per IP — fine
+        for casual browsing, but you'll want a personal key if you hit the cap.
+        Keys are base64-stored in your browser only, never sent anywhere except
+        NASA.
+      </p>
+      <div class="settings-row">
+        <label for="api-key-input">Personal key</label>
+        <input id="api-key-input" type="password" autocomplete="off" spellcheck="false"
+               placeholder="paste here, then Save" />
+      </div>
+      <div class="settings-row settings-status" id="settings-status">
+        Currently using: <strong id="settings-current">DEMO_KEY</strong>
+      </div>
+      <div class="settings-actions">
+        <a href="https://api.nasa.gov" target="_blank" rel="noopener" class="btn">
+          Get a free key ↗
+        </a>
+        <span style="flex:1"></span>
+        <button type="button" class="btn" id="settings-clear">Use DEMO_KEY</button>
+        <button type="button" class="btn btn-primary" id="settings-save">Save</button>
+        <button type="button" class="btn" id="settings-close">Close</button>
+      </div>
+    </form>
+  </dialog>
 
   <main id="view" aria-live="polite"></main>
 

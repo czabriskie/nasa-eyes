@@ -6,6 +6,7 @@ import * as Range from "./range.js";
 import * as Compare from "./compare.js";
 import { COLLECTIONS } from "./api.js";
 import { getLastCollection } from "./state.js";
+import { initSettingsUI } from "./settings.js";
 import { toast } from "./ui.js";
 
 const VIEW = () => document.getElementById("view");
@@ -85,4 +86,7 @@ function escapeHtml(s) {
 }
 
 window.addEventListener("hashchange", dispatch);
-window.addEventListener("DOMContentLoaded", dispatch);
+window.addEventListener("DOMContentLoaded", () => {
+  initSettingsUI();
+  dispatch();
+});
