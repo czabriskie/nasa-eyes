@@ -19,32 +19,37 @@ function renderStatus(statusEl, currentEl) {
 
 export function initSettingsUI() {
   const btn = document.getElementById("settings-btn");
-  const dialog = document.getElementById("settings-dialog");
-  if (!btn || !dialog) return;
+  const modal = document.getElementById("settings-modal");
+  if (!btn || !modal) {
+    console.warn("[nasa-eyes] settings UI missing elements", { btn: !!btn, modal: !!modal });
+    return;
+  }
 
-  const input = dialog.querySelector("#api-key-input");
-  const statusEl = dialog.querySelector("#settings-status");
-  const currentEl = dialog.querySelector("#settings-current");
-  const saveBtn = dialog.querySelector("#settings-save");
-  const clearBtn = dialog.querySelector("#settings-clear");
-  const closeBtn = dialog.querySelector("#settings-close");
+  const input = modal.querySelector("#api-key-input");
+  const statusEl = modal.querySelector("#settings-status");
+  const currentEl = modal.querySelector("#settings-current");
+  const saveBtn = modal.querySelector("#settings-save");
+  const clearBtn = modal.querySelector("#settings-clear");
 
   function open() {
     input.value = "";
     renderStatus(statusEl, currentEl);
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
-    // Focus the input after the modal animates in.
-    setTimeout(() => input.focus(), 50);
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+    setTimeout(() => input.focus(), 30);
   }
 
   function close() {
-    if (typeof dialog.close === "function") dialog.close();
-    else dialog.removeAttribute("open");
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
   }
 
   btn.addEventListener("click", open);
-  closeBtn.addEventListener("click", close);
+
+  // Anything with data-close (backdrop, Close button) dismisses the modal.
+  modal.addEventListener("click", (e) => {
+    if (e.target instanceof HTMLElement && e.target.dataset.close === "1") close();
+  });
 
   saveBtn.addEventListener("click", () => {
     const value = input.value.trim();
@@ -53,8 +58,6 @@ export function initSettingsUI() {
       return;
     }
     setApiKey(value);
-    // The new key changes our quota; clear availability cache so the next
-    // request actually re-fetches via the new identity.
     clearAvailabilityCache();
     toast("Saved your personal NASA key.");
     renderStatus(statusEl, currentEl);
@@ -68,9 +71,8 @@ export function initSettingsUI() {
     renderStatus(statusEl, currentEl);
   });
 
-  // Close on Escape (native <dialog> already supports this, but kept for fallback).
-  dialog.addEventListener("cancel", (e) => {
-    e.preventDefault();
-    close();
+  // Escape closes the modal when it's open.
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.hidden) close();
   });
 }
